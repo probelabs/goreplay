@@ -2,15 +2,25 @@ package goreplay
 
 import (
 	"bytes"
+	cryptoRand "crypto/rand"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
+	"math/big"
 	"os"
 	"sync"
 	"testing"
 	"time"
 )
+
+// generateSecureRandomID generates a cryptographically secure random ID for use in tests
+func generateSecureRandomID(t *testing.T) int64 {
+	randomBigInt, err := cryptoRand.Int(cryptoRand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		t.Fatalf("Failed to generate secure random number: %v", err)
+	}
+	return randomBigInt.Int64()
+}
 
 func TestInputFileWithGET(t *testing.T) {
 	input := NewTestInput()
@@ -88,7 +98,7 @@ func TestInputFileWithGETAndPOST(t *testing.T) {
 }
 
 func TestInputFileMultipleFilesWithRequestsOnly(t *testing.T) {
-	rnd := rand.Int63()
+	rnd := generateSecureRandomID(t)
 
 	file1, _ := os.OpenFile(fmt.Sprintf("/tmp/%d_0", rnd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 	file1.Write([]byte("1 1 1\ntest1"))
@@ -118,7 +128,7 @@ func TestInputFileMultipleFilesWithRequestsOnly(t *testing.T) {
 }
 
 func TestInputFileRequestsWithLatency(t *testing.T) {
-	rnd := rand.Int63()
+	rnd := generateSecureRandomID(t)
 
 	file, _ := os.OpenFile(fmt.Sprintf("/tmp/%d", rnd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 	defer file.Close()
@@ -146,7 +156,7 @@ func TestInputFileRequestsWithLatency(t *testing.T) {
 }
 
 func TestInputFileMultipleFilesWithRequestsAndResponses(t *testing.T) {
-	rnd := rand.Int63()
+	rnd := generateSecureRandomID(t)
 
 	file1, _ := os.OpenFile(fmt.Sprintf("/tmp/%d_0", rnd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 	file1.Write([]byte("1 1 1\nrequest1"))
@@ -189,7 +199,7 @@ func TestInputFileMultipleFilesWithRequestsAndResponses(t *testing.T) {
 }
 
 func TestInputFileLoop(t *testing.T) {
-	rnd := rand.Int63()
+	rnd := generateSecureRandomID(t)
 
 	file, _ := os.OpenFile(fmt.Sprintf("/tmp/%d", rnd), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 	file.Write([]byte("1 1 1\ntest1"))
@@ -210,7 +220,7 @@ func TestInputFileLoop(t *testing.T) {
 }
 
 func TestInputFileCompressed(t *testing.T) {
-	rnd := rand.Int63()
+	rnd := generateSecureRandomID(t)
 
 	output := NewFileOutput(fmt.Sprintf("/tmp/%d_0.gz", rnd), &FileOutputConfig{FlushInterval: time.Minute, Append: true})
 	for i := 0; i < 1000; i++ {
@@ -233,6 +243,55 @@ func TestInputFileCompressed(t *testing.T) {
 
 	os.Remove(name1)
 	os.Remove(name2)
+}
+
+func TestInputFileWatchForNewFiles(t *testing.T) {
+	rnd := generateSecureRandomID(t)
+	basePath := fmt.Sprintf("/tmp/%d", rnd)
+
+	// Create first file
+	file1, _ := os.OpenFile(fmt.Sprintf("%s_1", basePath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+	file1.Write([]byte("1 1 1\ntest1"))
+	file1.Write([]byte(payloadSeparator))
+	file1.Close()
+
+	// Initialize input with watching enabled and short watch interval
+	config := &FileInputConfig{
+		Loop:          false,
+		ReadDepth:     100, 
+		MaxWait:       0,
+		DryRun:        false,
+		WatchNewFiles: true,
+		WatchInterval: 300 * time.Millisecond, // Faster interval for testing
+	}
+	
+	input := NewFileInputWithConfig(fmt.Sprintf("%s_*", basePath), config)
+	
+	// Read the first message
+	msg1, err := input.PluginRead()
+	if err != nil || string(msg1.Data) != "test1" {
+		t.Error("Should read first file correctly:", err)
+	}
+
+	// Add a second file while input is running
+	file2, _ := os.OpenFile(fmt.Sprintf("%s_2", basePath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+	file2.Write([]byte("1 1 2\ntest2"))
+	file2.Write([]byte(payloadSeparator))
+	file2.Close()
+
+	// Wait for file discovery and processing (at least 2 watch intervals)
+	time.Sleep(700 * time.Millisecond)
+
+	// Should be able to read from the newly added file
+	msg2, err := input.PluginRead()
+	if err != nil || string(msg2.Data) != "test2" {
+		t.Error("Should read newly added file correctly:", err)
+	}
+
+	// Clean up
+	input.Close()
+	os.Remove(file1.Name())
+	os.Remove(file2.Name())
 }
 
 type CaptureFile struct {

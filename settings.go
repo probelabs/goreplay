@@ -87,13 +87,15 @@ type AppSettings struct {
 	OutputWebSocketConfig WebSocketOutputConfig
 	OutputWebSocketStats  bool `json:"output-ws-stats"`
 
-	InputFile          []string      `json:"input-file"`
-	InputFileLoop      bool          `json:"input-file-loop"`
-	InputFileReadDepth int           `json:"input-file-read-depth"`
-	InputFileDryRun    bool          `json:"input-file-dry-run"`
-	InputFileMaxWait   time.Duration `json:"input-file-max-wait"`
-	OutputFile         []string      `json:"output-file"`
-	OutputFileConfig   FileOutputConfig
+	InputFile            []string      `json:"input-file"`
+	InputFileLoop        bool          `json:"input-file-loop"`
+	InputFileReadDepth   int           `json:"input-file-read-depth"`
+	InputFileDryRun      bool          `json:"input-file-dry-run"`
+	InputFileMaxWait     time.Duration `json:"input-file-max-wait"`
+	InputFileWatch       bool          `json:"input-file-watch"`
+	InputFileWatchInterval time.Duration `json:"input-file-watch-interval"`
+	OutputFile           []string      `json:"output-file"`
+	OutputFileConfig     FileOutputConfig
 
 	InputRAW       []string `json:"input_raw"`
 	InputRAWConfig RAWInputConfig
@@ -167,6 +169,8 @@ func init() {
 	flag.IntVar(&Settings.InputFileReadDepth, "input-file-read-depth", 100, "GoReplay tries to read and cache multiple records, in advance. In parallel it also perform sorting of requests, if they came out of order. Since it needs hold this buffer in memory, bigger values can cause worse performance")
 	flag.BoolVar(&Settings.InputFileDryRun, "input-file-dry-run", false, "Simulate reading from the data source without replaying it. You will get information about expected replay time, number of found records etc.")
 	flag.DurationVar(&Settings.InputFileMaxWait, "input-file-max-wait", 0, "Set the maximum time between requests. Can help in situations when you have too long periods between request, and you want to skip them. Example: --input-raw-max-wait 1s")
+	flag.BoolVar(&Settings.InputFileWatch, "input-file-watch", true, "Watch for new files matching pattern. When turned on, Gor will continue running after processing all existing files, watching for new ones.")
+	flag.DurationVar(&Settings.InputFileWatchInterval, "input-file-watch-interval", 5*time.Second, "Interval for checking for new files. Example: --input-file-watch-interval 10s")
 
 	flag.Var(&MultiOption{&Settings.OutputFile}, "output-file", "Write incoming requests to file: \n\tgor --input-raw :80 --output-file ./requests.gor")
 	flag.DurationVar(&Settings.OutputFileConfig.FlushInterval, "output-file-flush-interval", time.Second, "Interval for forcing buffer flush to the file, default: 1s.")
