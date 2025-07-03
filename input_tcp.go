@@ -117,7 +117,9 @@ func (i *TCPInput) handleConnection(conn net.Conn) {
 
 		if bytes.Equal(payloadSeparatorAsBytes[1:], line) {
 			// unread the '\n' before monkeys
-			buffer.UnreadByte()
+			if buffer.Len() > 0 {
+				buffer.Truncate(buffer.Len() - 1)
+			}
 			var msg Message
 			msg.Meta, msg.Data = payloadMetaWithBody(buffer.Bytes())
 			i.data <- &msg
