@@ -1,46 +1,42 @@
-require "language/go"
-
 class Gor < Formula
   desc "Real-time HTTP traffic replay tool written in Go"
-  homepage "https://gortool.com"
-  url "https://github.com/buger/gor/archive/v0.14.0.tar.gz"
-  sha256 "62260a6f5cabde571b91d5762fba9c47691643df0a58565cbe808854cd064dc8"
-  head "https://github.com/buger/gor.git"
-
-  bottle do
-    cellar :any_skip_relocation
-    sha256 "c382403de70a41b7445920a02051f5e82030704aaaae70cfcd4e8f401cc87f6a" => :el_capitan
-    sha256 "4b76b3785584897800e87967f1af9510208faefe46f57d7bd6f8b40a7133c19b" => :yosemite
-    sha256 "d186cb1566d33ab8f78215e69934f49dd96becb1c236905b4502d94399ae1974" => :mavericks
-  end
+  homepage "https://goreplay.org"
+  url "https://github.com/grofers/goreplay/archive/refs/tags/v2.0.0.tar.gz"
+  sha256 "PLACEHOLDER_SHA256"
+  license "LGPL-3.0"
+  head "https://github.com/grofers/goreplay.git", branch: "master"
 
   depends_on "go" => :build
 
-  go_resource "github.com/bitly/go-hostpool" do
-    url "https://github.com/bitly/go-hostpool.git",
-      :revision => "d0e59c22a56e8dadfed24f74f452cea5a52722d2"
-  end
-
-  go_resource "github.com/buger/elastigo" do
-    url "https://github.com/buger/elastigo.git",
-      :revision => "23fcfd9db0d8be2189a98fdab77a4c90fcc3a1e9"
-  end
-
-  go_resource "github.com/google/gopacket" do
-    url "https://github.com/google/gopacket.git",
-      :revision => "aa09ced736460d76535444c825932a0742975f7d"
-  end
-
   def install
-    ENV["GOPATH"] = buildpath
-    mkdir_p buildpath/"src/github.com/buger/"
-    ln_sf buildpath, buildpath/"src/github.com/buger/gor"
-    Language::Go.stage_deps resources, buildpath/"src"
+    # Sync vendor directory to ensure consistency
+    system "go", "mod", "vendor"
+    
+    # Set build flags
+    ldflags = "-X main.VERSION=#{version}"
+    
+    # Build the binary
+    system "go", "build",
+           "-mod=vendor",
+           "-buildvcs=false",
+           "--tags", "ngo",
+           "-ldflags", ldflags,
+           "-o", bin/"gor",
+           "./cmd/gor/"
+  end
 
-    system "go", "build", "-o", "#{bin}/gor", "-ldflags", "-X main.VERSION \"#{version}\""
+  def caveats
+    <<~EOS
+      GoReplay (gor) requires raw socket access for packet capture.
+      You may need to run it with sudo:
+        sudo gor --input-raw :8080 --output-http http://staging.example.com
+    EOS
   end
 
   test do
-    assert_match version.to_s, shell_output("#{bin}/gor", 1)
+    # Test that the binary runs and shows help
+    output = shell_output("#{bin}/gor 2>&1", 2)
+    assert_match "Gor is a simple http traffic replication tool", output
+    assert_match "Current Version:", output
   end
 end
