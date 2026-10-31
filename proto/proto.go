@@ -24,6 +24,7 @@ import (
 	_ "fmt"
 	"net/http"
 	"net/textproto"
+	"strconv"
 	"strings"
 )
 
@@ -529,8 +530,22 @@ func HasFullPayload(m ProtocolStateSetter, payloads ...[]byte) bool {
 				// trailers are generally not allowed in non-chunks body
 				state.HasTrailer = len(Header(data, []byte("Trailer"))) > 0
 			} else {
-				contentLen := Header(data, []byte("Content-Length"))
-				state.BodyLen, _ = atoI(contentLen, 10)
+				contentLen, start, _, _, _ := header(data, []byte("Content-Length"))
+				if start >= 0 {
+					if len(contentLen) == 0 {
+						return false
+					}
+					for _, c := range contentLen {
+						if c < '0' || c > '9' {
+							return false
+						}
+					}
+					var err error
+					state.BodyLen, err = strconv.Atoi(string(contentLen))
+					if err != nil {
+						return false
+					}
+				}
 			}
 
 			pos += len(data)
